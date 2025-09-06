@@ -9,12 +9,19 @@
   "action": {
     "default_title": "Aura - Sustainability Insights"
   },
-  "permissions": ["sidePanel"],
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "sidePanel"
+  ],
   "background": {
     "service_worker": "background.js"
-  }
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.amazon.in/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
 }
-
-
-
-

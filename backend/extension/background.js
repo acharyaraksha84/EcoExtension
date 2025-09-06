@@ -1,47 +1,46 @@
-const API_URL = "http://localhost:8000/analyze"; // Use localhost instead of 127.0.0.1
+// background.js
+const API_URL = "http://localhost:8000/analyze"; // FastAPI backend
 
-// 1. Open side panel when icon is clicked
 chrome.action.onClicked.addListener((tab) => {
   chrome.sidePanel.open({ windowId: tab.windowId });
 });
 
-// 2. Handle analyzeProduct messages
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "analyzeProduct") {
-    console.log("🌱 Background script received URL:", request.url);
-
-    fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: request.url })
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then((data) => {
-        console.log("✅ Data received from API:", data);
-        sendResponse({ status: "success", data });
-      })
-      .catch((error) => {
-        console.error("❌ Error fetching from API:", error);
-
-        // Fallback dummy data for testing
-        sendResponse({
-          status: "success",
-          data: {
-            score: 6,
-            alternatives: [
-              { name: "Reusable Bottle", score: 9 },
-              { name: "Eco Bag", score: 8 }
-            ]
-          }
-        });
-      });
-
-    return true; // Keeps the message channel open for async response
+    if (request.text) {
+      analyzeText(request.text, sendResponse);
+      return true;
+    }
   }
 });
 
+function analyzeText(text, sendResponse) {
+  fetch(API_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text })
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (data.alternatives && Array.isArray(data.alternatives)) {
+        data.alternatives = data.alternatives.map((alt) => ({
+          ...alt,
+          image: alt.image?.startsWith("http") ? alt.image : "https://placehold.co/76x76"
+        }));
+      }
+
+      sendResponse({ status: "success", data });
+      // broadcast to panel
+      chrome.runtime.sendMessage({ action: "updateAnalysis", data });
+    })
+    .catch(err => {
+      sendResponse({ status: "error", error: err.message });
+    });
+}
+
+// 🔄 detect when product page reloads
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === "complete" && /^https?:/.test(tab.url)) {
+    chrome.tabs.sendMessage(tabId, { action: "triggerAnalysis" });
+  }
+});
